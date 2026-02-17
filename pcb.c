@@ -13,7 +13,7 @@ PCB* pcb_create(int pid, int start, int end) {
 	pcb->pc = start; //execute from first line
 	pcb->start = start;
 	pcb->end = end;
-	pcb->job_elngth_score = end - start + 1;
+	pcb->job_length_score = end - start + 1;
 	pcb->next = NULL;
 
 	return pcb;

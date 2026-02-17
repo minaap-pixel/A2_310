@@ -22,6 +22,9 @@
 
 #include "shellmemory.h"
 #include "shell.h"
+#include "interpreter.h"
+#include "pcb.h"
+#include "scheduler.h"
 
 int badcommand() {
     printf("Unknown Command\n");
@@ -353,30 +356,39 @@ int cd(char *path) {
     }
     return 0;
 }
-
-int source(char *script) {
-    int errCode = 0;
-    char line[MAX_USER_INPUT];
-    FILE *p = fopen(script, "rt");      // the program is in a file
-
-    if (p == NULL) {
-        return badcommandFileDoesNotExist();
+int source(char *filename) {
+    // load the entire script into memory
+    int start, end;
+    int result = mem_load_code(filename, &start, &end);
+    
+    if (result != 0) {
+        printf("Error: file not found\n");
+        return 1;
     }
-
-    fgets(line, MAX_USER_INPUT - 1, p);
-    while (1) {
-        errCode = parseInput(line);     // which calls interpreter()
-        memset(line, 0, sizeof(line));
-
-        if (feof(p)) {
-            break;
-        }
-        fgets(line, MAX_USER_INPUT - 1, p);
+    
+    // create a PCB for this script
+    PCB *pcb = pcb_create(0, start, end);  // PID will be assigned by scheduler
+    
+    if (pcb == NULL) {
+        mem_free_code(start, end);
+        printf("Error: could not create process\n");
+        return 1;
     }
-
-    fclose(p);
-
-    return errCode;
+    
+    // initialize scheduler if not already done
+    static int scheduler_initialized = 0;
+    if (!scheduler_initialized) {
+        scheduler_initialize();
+        scheduler_initialized = 1;
+    }
+    
+    // add process to scheduler
+    scheduler_add_process(pcb);
+    
+    // run the scheduler
+    scheduler_run();
+    
+    return 0;
 }
 
 int run(char *args[], int arg_size) {
