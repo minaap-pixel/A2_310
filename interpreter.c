@@ -141,6 +141,14 @@ int interpreter(char *command_args[], int args_size) {
             return badcommand();
         return run(&command_args[1], args_size - 1);
 
+    } else if (strcmp(command_args[0], "exec") == 0) {
+	if (args_size < 3 || args_size > 5) {
+	    return badcommand();
+	}
+	char *policy = command_args[args_size - 1];
+	int num_progs = args_size - 2;
+	return exec_programs(command_args + 1, num_progs, policy);  
+    
     } else
         return badcommand();
 }
@@ -424,6 +432,87 @@ int run(char *args[], int arg_size) {
         // we are the parent process.
         waitpid(pid, NULL, 0);
     }
+
+    return 0;
+}
+
+int exec_programs(char *filenames[], int num_files, char *policy) {
+    // Validate policy (since more policies will be added after)
+    if (strcmp(policy, "FCFS") != 0 && strcmp(policy, "SJF") != 0 &&
+        strcmp(policy, "RR") != 0 && strcmp(policy, "AGING") != 0) {
+        printf("Error: Unknown policy %s\n", policy);
+        return 1;
+    }
+
+    // Check for duplicate filenames
+    for (int i = 0; i < num_files; i++) {
+        for (int j = i + 1; j < num_files; j++) {
+            if (strcmp(filenames[i], filenames[j]) == 0) {
+                printf("Error: Duplicate script name %s\n", filenames[i]);
+                return 1;
+            }
+        }
+    }
+
+    // Arrays to store start/end positions for each program (max 3)
+    int starts[3];
+    int ends[3];
+
+    // Load all programs into memory
+    for (int i = 0; i < num_files; i++) {
+        int result = mem_load_code(filenames[i], &starts[i], &ends[i]);
+        if (result != 0) {
+            // Loading failed - clean up previously loaded programs
+            printf("Error: Could not load file %s\n", filenames[i]);
+            for (int j = 0; j < i; j++) {
+                mem_free_code(starts[j], ends[j]);
+            }
+            return 1;
+        }
+    }
+
+    // All programs loaded successfully - create PCBs
+    PCB *pcbs[3];
+    for (int i = 0; i < num_files; i++) {
+        pcbs[i] = pcb_create(0, starts[i], ends[i]);
+        if (pcbs[i] == NULL) {
+            printf("Error: Could not create PCB\n");
+            // Clean up
+            for (int j = 0; j <= i; j++) {
+                if (pcbs[j] != NULL) pcb_destroy(pcbs[j]);
+            }
+            for (int j = 0; j < num_files; j++) {
+                mem_free_code(starts[j], ends[j]);
+            }
+            return 1;
+        }
+    }
+
+    // Initialize scheduler if needed
+    static int scheduler_initialized = 0;
+    if (!scheduler_initialized) {
+        scheduler_initialize();
+        scheduler_initialized = 1;
+    }
+
+    // Set the scheduling policy (adding these for later)
+    if (strcmp(policy, "FCFS") == 0) {
+        scheduler_set_policy(FCFS);
+    } else if (strcmp(policy, "SJF") == 0) {
+        scheduler_set_policy(SJF);
+    } else if (strcmp(policy, "RR") == 0) {
+        scheduler_set_policy(RR);
+   // } else if (strcmp(policy, "AGING") == 0) {
+   //     scheduler_set_policy(AGING);
+    }
+
+    // Add all processes to scheduler
+    for (int i = 0; i < num_files; i++) {
+        scheduler_add_process(pcbs[i]);
+    }
+
+    // Run the scheduler
+    scheduler_run();
 
     return 0;
 }

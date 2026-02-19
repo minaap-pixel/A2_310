@@ -6,6 +6,9 @@
 
 typedef enum {
 	FCFS, //first come first serve
+	SJF, // shortest job first
+	RR, // round robin
+	AGING, // for A3? (make sure to change interpreter.c for A3 as well)
 } SchedulingPolicy;
 
 
